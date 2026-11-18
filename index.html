@@ -17,6 +17,12 @@
       padding: 0;
       transition: background-color 0.3s ease;
     }
+    input, textarea {
+      font-size: 16px !important;
+      user-select: text !important;
+      -webkit-user-select: text !important;
+      touch-action: manipulation;
+    }
     @keyframes floatPet {
       0%, 100% { transform: translateY(0px) scale(1); }
       50% { transform: translateY(-7px) scale(1.02); }
@@ -66,13 +72,12 @@
   <!-- Firebase SDKs -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // ==========================================
     // 1. アプリ設定・定数・テーマ定義
     // ==========================================
-    const APP_VERSION = "v1.2.1";
     const THEMES = {
       cream: {
         name: "ウォームクリーム",
@@ -132,32 +137,32 @@
     const QUESTIONS = [
       "初めて会ったときの第一印象、今でも覚えてる？",
       "ふたりでこれから一番行ってみたい旅行先はどこ？",
-      "相手の「ここが実はすごく好き！」と思う小さな癖は？",
-      "休日の理想の過ごし方を1つ挙げるなら？",
-      "最近「ありがとう」と伝えたいと思った瞬間は？",
-      "ふたりで一緒に挑戦してみたい趣味や体験はある？",
-      "相手を動物やキャラクターに例えるなら何？",
-      "今までで一番笑ったふたりの思い出は？",
+      "相手の「ここが実は好き！」と思う小さな癖はある？",
+      "ふたりの休日の理想の過ごし方を1つ挙げるなら？",
+      "最近、相手に「ありがとう」と伝えたいと思った瞬間は？",
+      "ふたりで一緒に挑戦してみたい趣味や体験は？",
+      "相手を動物やキャラクターに例えるなら何に似てる？",
+      "今までで一番笑ったふたりの思い出は何？",
       "落ち込んでいるとき、相手にしてもらうと嬉しいことは？",
       "10年後のふたりはどんな風に過ごしていると思う？",
       "相手の手料理や一緒に食べたいご飯で一番好きなものは？",
-      "デートの待ち合わせ、実はいつもどんな気持ちで待ってる？",
-      "ふたりだけの「マイルール」を作るなら何にする？",
+      "デートの待ち合わせ、実はどんな気持ちで待ってる？",
+      "ふたりだけの特別な「マイルール」を作るなら何にする？",
       "季節のイベント（春・夏・秋・冬）で一番一緒に楽しみたいのは？",
-      "言葉にしなくても「今こう思ってるな」と分かる瞬間は？",
+      "言葉にしなくても「今こう思ってるな」と伝わる瞬間はある？",
       "次に記念日をお祝いするとき、どんな風に過ごしたい？",
-      "相手からもらった言葉やメッセージで宝物にしているものは？",
-      "朝起きて一番最初に相手に言いたい一言は？",
+      "相手からもらった言葉やメッセージで宝物にしているものはある？",
+      "朝起きて一番最初に相手に言いたい一言は何？",
       "ふたりでお揃いにしたいアイテムはある？",
       "今日1日を100点満点で採点すると何点？その理由は？",
       "もし1日だけ入れ替わったら、まず何をしてみたい？",
       "相手と一緒にいるとき、自分が一番リラックスできる瞬間は？",
       "今までに行ったデートスポットで「また行きたい！」と思う場所は？",
       "相手の尊敬しているところを1つ教えて！",
-      "雨の日にふたりでおうちデートをするなら何をする？",
-      "相手が眠そうにしているときの可愛いエピソードは？",
+      "雨の日にふたりでおうちデートをするなら何をして過ごす？",
+      "相手が眠そうにしているときの可愛いエピソードはある？",
       "ふたりでタイムカプセルを埋めるなら何を入れる？",
-      "最近見つけた「相手に教えたくなったこと」は？",
+      "最近見つけた「相手に教えてあげたいこと」は何？",
       "今すぐ相手にハグかハイタッチをするならどっち？",
       "これからもずっと大切にしたいふたりの約束事は？"
     ];
@@ -171,10 +176,10 @@
     let useLocalFallback = false;
 
     let state = {
-      screen: "login", // login | main
-      activeTab: "home", // home | question | calendar | settings
+      screen: "login",
+      activeTab: "home",
       roomId: "",
-      role: "A", // A or B
+      myName: "",
       roomData: null,
       selectedDate: getTodayStr(),
       calYear: new Date().getFullYear(),
@@ -200,29 +205,60 @@
       return QUESTIONS[hash % QUESTIONS.length];
     }
 
-    function normalizeRoomData(raw, roomId, password) {
+    function normalizeRoomData(raw, roomId, password, myNameInput, annivInput) {
       const data = raw || {};
+      const members = data.members && typeof data.members === "object" ? { ...data.members } : {};
+
+      if (Object.keys(members).length === 0) {
+        if (data.partnerA && data.partnerA.name) {
+          members[data.partnerA.name] = {
+            mood: data.partnerA.mood || "🥰",
+            memo: data.partnerA.memo || "今日もよろしくね！"
+          };
+        }
+        if (data.partnerB && data.partnerB.name && data.partnerB.name !== "パートナー") {
+          members[data.partnerB.name] = {
+            mood: data.partnerB.mood || "😊",
+            memo: data.partnerB.memo || "いつもありがとう！"
+          };
+        }
+      }
+
+      if (myNameInput && !members[myNameInput]) {
+        members[myNameInput] = {
+          mood: "🥰",
+          memo: "よろしくね！"
+        };
+      }
+
+      const answers = {};
+      if (data.answers && typeof data.answers === "object") {
+        for (const [dt, ans] of Object.entries(data.answers)) {
+          const byName = ans.byName && typeof ans.byName === "object" ? { ...ans.byName } : {};
+          if (ans.A && data.partnerA?.name && !byName[data.partnerA.name]) {
+            byName[data.partnerA.name] = ans.A;
+          }
+          if (ans.B && data.partnerB?.name && !byName[data.partnerB.name]) {
+            byName[data.partnerB.name] = ans.B;
+          }
+          answers[dt] = {
+            question: ans.question || getQuestionForDate(dt),
+            byName
+          };
+        }
+      }
+
       return {
-        version: APP_VERSION,
         roomId: data.roomId || roomId,
         password: data.password || password || "",
-        partnerA: {
-          name: data.partnerA?.name || "わたし",
-          mood: data.partnerA?.mood || "🥰",
-          memo: data.partnerA?.memo || "今日もよろしくね！"
-        },
-        partnerB: {
-          name: data.partnerB?.name || "パートナー",
-          mood: data.partnerB?.mood || "😊",
-          memo: data.partnerB?.memo || "いつもありがとう！"
-        },
-        anniversary: data.anniversary || getTodayStr(),
+        members,
+        anniversary: data.anniversary || annivInput || getTodayStr(),
         pet: {
           name: data.pet?.name || "もちまる",
           exp: typeof data.pet?.exp === "number" ? data.pet.exp : 10
         },
         theme: THEMES[data.theme] ? data.theme : "cream",
-        answers: data.answers && typeof data.answers === "object" ? data.answers : {},
+        answers,
         updatedAt: data.updatedAt || Date.now()
       };
     }
@@ -243,7 +279,6 @@
             await signInAnonymously(auth);
           }
         } else {
-          // GitHub Pages等で単体公開した際の安全フォールバック
           useLocalFallback = true;
         }
       } catch (err) {
@@ -262,11 +297,14 @@
       return doc(db, "artifacts", appId, "public", "data", "rooms", safeId);
     }
 
-    async function enterRoom(roomIdInput, passwordInput, roleInput) {
+    async function enterRoom(myNameInput, roomIdInput, passwordInput, annivInput) {
+      const myName = myNameInput.trim();
       const roomId = roomIdInput.trim();
       const password = passwordInput.trim();
-      if (!roomId || !password) {
-        showToast("ルーム名とあいことばを入力してね！");
+      const anniv = annivInput || getTodayStr();
+
+      if (!myName || !roomId || !password) {
+        showToast("お名前、ルーム名、あいことばを入力してね！");
         return;
       }
 
@@ -276,19 +314,20 @@
         if (savedRaw) {
           const parsed = JSON.parse(savedRaw);
           if (parsed.password && parsed.password !== password) {
-            showToast("あいことばが違うみたいです！");
+            showToast("あいことばが違います。もう一度確認してね！");
             return;
           }
-          state.roomData = normalizeRoomData(parsed, roomId, password);
+          state.roomData = normalizeRoomData(parsed, roomId, password, myName, anniv);
+          localStorage.setItem(storageKey, JSON.stringify(state.roomData));
         } else {
-          state.roomData = normalizeRoomData(null, roomId, password);
+          state.roomData = normalizeRoomData(null, roomId, password, myName, anniv);
           localStorage.setItem(storageKey, JSON.stringify(state.roomData));
         }
         state.roomId = roomId;
-        state.role = roleInput;
+        state.myName = myName;
         state.screen = "main";
         render();
-        showToast("おうちに入室しました！");
+        showToast(`${myName}さん、おかえりなさい！`);
         return;
       }
 
@@ -299,34 +338,35 @@
         if (snap.exists()) {
           const existing = snap.data();
           if (existing.password && existing.password !== password) {
-            showToast("あいことばが違うみたいです！");
+            showToast("あいことばが違います。もう一度確認してね！");
             return;
           }
-          const normalized = normalizeRoomData(existing, roomId, password);
+          const normalized = normalizeRoomData(existing, roomId, password, myName, anniv);
+          await setDoc(ref, normalized, { merge: true });
           state.roomData = normalized;
         } else {
-          const initial = normalizeRoomData(null, roomId, password);
+          const initial = normalizeRoomData(null, roomId, password, myName, anniv);
           await setDoc(ref, initial);
           state.roomData = initial;
         }
 
         state.roomId = roomId;
-        state.role = roleInput;
+        state.myName = myName;
         state.screen = "main";
 
         if (unsubscribeRoom) unsubscribeRoom();
         unsubscribeRoom = onSnapshot(ref, (docSnap) => {
           if (docSnap.exists()) {
-            state.roomData = normalizeRoomData(docSnap.data(), roomId, password);
+            state.roomData = normalizeRoomData(docSnap.data(), roomId, password, myName, anniv);
             render();
           }
         });
 
         render();
-        showToast("おうちに入室しました！");
+        showToast(`${myName}さん、おうちへようこそ！`);
       } catch (e) {
         console.error(e);
-        showToast("入室エラーが発生しました。もう一度お試しください。");
+        showToast("入室時にエラーが発生しました。もう一度お試しください。");
       }
     }
 
@@ -345,17 +385,27 @@
         await setDoc(ref, updatedData, { merge: true });
       } catch (e) {
         console.error("Save error:", e);
-        showToast("保存中に通信エラーが起きました");
+        showToast("保存中にエラーが起きました");
       }
     }
 
     function showToast(msg) {
       state.toastMessage = msg;
-      render();
+      const existingToast = document.getElementById("toast-banner");
+      if (existingToast) existingToast.remove();
+
+      const theme = (state.roomData && THEMES[state.roomData.theme]) || THEMES.cream;
+      const div = document.createElement("div");
+      div.id = "toast-banner";
+      div.className = "fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full shadow-lg text-xs font-bold text-white whitespace-nowrap";
+      div.style.backgroundColor = theme.text;
+      div.textContent = msg;
+      document.body.appendChild(div);
+
       setTimeout(() => {
         if (state.toastMessage === msg) {
           state.toastMessage = "";
-          render();
+          div.remove();
         }
       }, 2600);
     }
@@ -365,10 +415,11 @@
     // ==========================================
     window.handleLogin = (e) => {
       e.preventDefault();
-      const r = document.getElementById("login-room").value;
-      const p = document.getElementById("login-pass").value;
-      const role = document.querySelector('input[name="login-role"]:checked').value;
-      enterRoom(r, p, role);
+      const name = document.getElementById("login-name").value;
+      const room = document.getElementById("login-room").value;
+      const pass = document.getElementById("login-pass").value;
+      const anniv = document.getElementById("login-anniv").value;
+      enterRoom(name, room, pass, anniv);
     };
 
     window.switchTab = (tab) => {
@@ -376,7 +427,7 @@
       render();
     };
 
-    window.petTap = (e) => {
+    window.petTap = () => {
       const petEl = document.getElementById("pet-avatar");
       if (petEl) {
         petEl.classList.remove("pet-squish");
@@ -402,10 +453,13 @@
 
     window.updateMood = (emoji) => {
       const next = structuredClone(state.roomData);
-      const key = state.role === "A" ? "partnerA" : "partnerB";
-      next[key].mood = emoji;
+      if (!next.members[state.myName]) {
+        next.members[state.myName] = { mood: emoji, memo: "今日もよろしくね！" };
+      } else {
+        next.members[state.myName].mood = emoji;
+      }
       saveRoomData(next);
-      showToast("気分を更新しました！");
+      showToast("今の気分を更新しました！");
     };
 
     window.updateMemo = () => {
@@ -413,10 +467,13 @@
       if (!input) return;
       const val = input.value.trim();
       const next = structuredClone(state.roomData);
-      const key = state.role === "A" ? "partnerA" : "partnerB";
-      next[key].memo = val || "よろしくね！";
+      if (!next.members[state.myName]) {
+        next.members[state.myName] = { mood: "🥰", memo: val || "今日もよろしくね！" };
+      } else {
+        next.members[state.myName].memo = val || "今日もよろしくね！";
+      }
       saveRoomData(next);
-      showToast("ミニメモを貼りました！");
+      showToast("ミニメモを保存しました！");
     };
 
     window.submitAnswer = (dateStr) => {
@@ -424,24 +481,26 @@
       if (!textarea) return;
       const text = textarea.value.trim();
       if (!text) {
-        showToast("回答を入力してね！");
+        showToast("回答を入力してくださいね！");
         return;
       }
       const next = structuredClone(state.roomData);
       if (!next.answers[dateStr]) {
         next.answers[dateStr] = {
           question: getQuestionForDate(dateStr),
-          A: "",
-          B: ""
+          byName: {}
         };
       }
-      const isFirstTime = !next.answers[dateStr][state.role];
-      next.answers[dateStr][state.role] = text;
+      if (!next.answers[dateStr].byName) {
+        next.answers[dateStr].byName = {};
+      }
+      const isFirstTime = !next.answers[dateStr].byName[state.myName];
+      next.answers[dateStr].byName[state.myName] = text;
       if (isFirstTime) {
         next.pet.exp += 15;
       }
       saveRoomData(next);
-      showToast(isFirstTime ? "回答を保存！なかよし度+15 💖" : "回答を更新しました！");
+      showToast(isFirstTime ? "回答を保存しました！なかよし度 +15 💖" : "回答を更新しました！");
     };
 
     window.selectCalendarDate = (dateStr) => {
@@ -463,12 +522,27 @@
     window.saveSettings = (e) => {
       e.preventDefault();
       const next = structuredClone(state.roomData);
-      next.partnerA.name = document.getElementById("set-name-a").value.trim() || "わたし";
-      next.partnerB.name = document.getElementById("set-name-b").value.trim() || "パートナー";
+      const newMyName = document.getElementById("set-my-name").value.trim();
+
+      if (newMyName && newMyName !== state.myName) {
+        const myProfile = next.members[state.myName] || { mood: "🥰", memo: "今日もよろしくね！" };
+        delete next.members[state.myName];
+        next.members[newMyName] = myProfile;
+
+        for (const dt of Object.keys(next.answers)) {
+          if (next.answers[dt]?.byName && next.answers[dt].byName[state.myName]) {
+            next.answers[dt].byName[newMyName] = next.answers[dt].byName[state.myName];
+            delete next.answers[dt].byName[state.myName];
+          }
+        }
+        state.myName = newMyName;
+      }
+
       next.anniversary = document.getElementById("set-anniv").value || getTodayStr();
       next.pet.name = document.getElementById("set-pet-name").value.trim() || "もちまる";
       const newPass = document.getElementById("set-pass").value.trim();
       if (newPass) next.password = newPass;
+
       saveRoomData(next);
       showToast("設定を保存しました！");
     };
@@ -482,10 +556,7 @@
 
     window.copyRoomInfo = () => {
       const d = state.roomData;
-      const text = `【ふたりのおうち】
-URL: ${window.location.href}
-ルーム名: ${d.roomId}
-あいことば: ${d.password}`;
+      const text = `【ふたりのおうち】\nURL: ${window.location.href}\nルーム名: ${d.roomId}\nあいことば: ${d.password}`;
       navigator.clipboard?.writeText(text);
       showToast("招待情報をコピーしました！");
     };
@@ -504,11 +575,11 @@ URL: ${window.location.href}
       const level = Math.floor(exp / 30) + 1;
       const progress = ((exp % 30) / 30) * 100;
       if (level <= 2) {
-        return { level, progress, stage: "たまご期", emoji: "🥚", desc: "ふたりの会話で温まっています" };
+        return { level, progress, stage: "たまご期", emoji: "🥚", desc: "ふたりの会話であたたまっています" };
       } else if (level <= 5) {
         return { level, progress, stage: "ひよこ期", emoji: "🐥", desc: "元気にぴよぴよ跳ねています" };
       } else {
-        return { level, progress, stage: "なかよし天使期", emoji: "👼", desc: "ふたりの愛で立派に成長しました！" };
+        return { level, progress, stage: "なかよし天使期", emoji: "👼", desc: "ふたりの愛ですくすく成長しました！" };
       }
     }
 
@@ -519,59 +590,56 @@ URL: ${window.location.href}
       return diff >= 0 ? diff + 1 : 0;
     }
 
+    function getPartnerInfo(d) {
+      const names = Object.keys(d.members || {});
+      const partnerName = names.find(n => n !== state.myName) || null;
+      const me = d.members[state.myName] || { mood: "🥰", memo: "今日もよろしくね！" };
+      const partner = partnerName ? d.members[partnerName] : null;
+      return { me, partnerName, partner };
+    }
+
     function renderLogin(theme) {
+      const todayStr = getTodayStr();
       return `
         <div class="flex-1 flex flex-col justify-center p-6" style="background-color: ${theme.bg}; color: ${theme.text};">
-          <div class="text-center mb-8">
+          <div class="text-center mb-6">
             <div class="inline-flex items-center justify-center w-20 h-20 rounded-full text-4xl shadow-md mb-3 pet-float" style="background-color: ${theme.card};">
               🥚
             </div>
-            <h1 class="text-2xl font-extrabold tracking-wide">ふたりのおうち</h1>
-            <p class="text-xs mt-1" style="color: ${theme.subtext};">毎日の質問でたまごを育てるカップル専用ルーム</p>
+            <div class="flex items-center justify-center gap-1.5">
+              <h1 class="text-2xl font-extrabold tracking-wide">ふたりのおうち</h1>
+              
+            </div>
+            <p class="text-xs mt-1" style="color: ${theme.subtext};">お名前と記念日を入力して、ふたりだけの空間へ</p>
           </div>
 
           <form onsubmit="handleLogin(event)" class="rounded-3xl p-6 shadow-sm border space-y-4" style="background-color: ${theme.card}; border-color: ${theme.border};">
             <div>
-              <label class="block text-xs font-bold mb-1">ルーム名（ID）</label>
-              <input id="login-room" type="text" required placeholder="例：taro-hanako" class="w-full px-4 py-3 rounded-2xl border text-sm focus:outline-none" style="border-color: ${theme.border}; background-color: ${theme.bg};" />
-              <p class="text-[11px] mt-1" style="color: ${theme.subtext};">※新しいルーム名なら自動で新規作成されます</p>
+              <label for="login-name" class="block text-xs font-bold mb-1">あなたのお名前</label>
+              <input id="login-name" name="myName" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" required placeholder="例：ゆうた / はな" class="w-full px-4 py-3 rounded-2xl border text-base focus:outline-none" style="border-color: ${theme.border}; background-color: ${theme.bg};" />
             </div>
 
             <div>
-              <label class="block text-xs font-bold mb-1">あいことば（パスワード）</label>
-              <input id="login-pass" type="text" required placeholder="ふたりだけの秘密の言葉" class="w-full px-4 py-3 rounded-2xl border text-sm focus:outline-none" style="border-color: ${theme.border}; background-color: ${theme.bg};" />
+              <label for="login-room" class="block text-xs font-bold mb-1">ルーム名</label>
+              <input id="login-room" name="roomId" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" required placeholder="例：yuta-hana" class="w-full px-4 py-3 rounded-2xl border text-base focus:outline-none" style="border-color: ${theme.border}; background-color: ${theme.bg};" />
+              <p class="text-[11px] mt-1" style="color: ${theme.subtext};">※同じルーム名とあいことばでパートナーも入れます</p>
             </div>
 
             <div>
-              <label class="block text-xs font-bold mb-1.5">あなたはどっち？</label>
-              <div class="grid grid-cols-2 gap-3">
-                <label class="cursor-pointer">
-                  <input type="radio" name="login-role" value="A" checked class="peer sr-only" />
-                  <div class="py-2.5 px-3 rounded-2xl border text-center text-sm font-bold peer-checked:text-white transition" style="border-color: ${theme.border};" data-active-bg="${theme.primary}">
-                    パートナー A
-                  </div>
-                </label>
-                <label class="cursor-pointer">
-                  <input type="radio" name="login-role" value="B" class="peer sr-only" />
-                  <div class="py-2.5 px-3 rounded-2xl border text-center text-sm font-bold peer-checked:text-white transition" style="border-color: ${theme.border};">
-                    パートナー B
-                  </div>
-                </label>
-              </div>
+              <label for="login-pass" class="block text-xs font-bold mb-1">あいことば</label>
+              <input id="login-pass" name="password" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" required placeholder="ふたりだけの秘密の合言葉" class="w-full px-4 py-3 rounded-2xl border text-base focus:outline-none" style="border-color: ${theme.border}; background-color: ${theme.bg};" />
+            </div>
+
+            <div>
+              <label for="login-anniv" class="block text-xs font-bold mb-1">ふたりの記念日（付き合った日など）</label>
+              <input id="login-anniv" name="anniversary" type="date" value="${todayStr}" class="w-full px-4 py-3 rounded-2xl border text-base focus:outline-none" style="border-color: ${theme.border}; background-color: ${theme.bg};" />
+              <p class="text-[11px] mt-1" style="color: ${theme.subtext};">※すでに部屋がある場合は、登録済みの記念日が優先されます</p>
             </div>
 
             <button type="submit" class="w-full py-3.5 rounded-2xl text-white font-bold text-sm shadow-md active:scale-95 transition" style="background-color: ${theme.primary};">
               おうちに入る 🏡
             </button>
           </form>
-
-          <style>
-            input[name="login-role"]:checked + div {
-              background-color: ${theme.primary} !important;
-              border-color: ${theme.primary} !important;
-              color: #FFFFFF !important;
-            }
-          </style>
         </div>
       `;
     }
@@ -579,19 +647,19 @@ URL: ${window.location.href}
     function renderHome(d, theme) {
       const petInfo = getPetStageInfo(d.pet.exp);
       const days = calcDaysTogether(d.anniversary);
-      const me = state.role === "A" ? d.partnerA : d.partnerB;
-      const partner = state.role === "A" ? d.partnerB : d.partnerA;
+      const { me, partnerName, partner } = getPartnerInfo(d);
       const todayStr = getTodayStr();
-      const todayAns = d.answers[todayStr] || {};
-      const answeredCount = (todayAns.A ? 1 : 0) + (todayAns.B ? 1 : 0);
+      const todayByName = (d.answers[todayStr] && d.answers[todayStr].byName) || {};
+      const answeredCount = Object.values(todayByName).filter(Boolean).length;
 
       return `
         <div class="p-4 space-y-4 pb-24">
-          <!-- 記念日バナー -->
           <div class="rounded-3xl p-4 shadow-sm border flex items-center justify-between" style="background-color: ${theme.card}; border-color: ${theme.border};">
             <div>
-              <p class="text-xs font-bold" style="color: ${theme.subtext};">${d.partnerA.name} 💕 ${d.partnerB.name}</p>
-              <p class="text-xl font-extrabold mt-0.5">一緒になって <span style="color: ${theme.primary};">${days}</span> 日目</p>
+              <p class="text-xs font-bold" style="color: ${theme.subtext};">
+                ${state.myName} 💕 ${partnerName || "パートナーの参加待ち"}
+              </p>
+              <p class="text-xl font-extrabold mt-0.5">付き合って <span style="color: ${theme.primary};">${days}</span> 日目</p>
             </div>
             <div class="text-right">
               <span class="inline-block px-3 py-1 rounded-full text-xs font-bold" style="background-color: ${theme.accent}; color: ${theme.primaryDark};">
@@ -600,14 +668,13 @@ URL: ${window.location.href}
             </div>
           </div>
 
-          <!-- ペット育成ステージ -->
           <div id="pet-stage" class="relative rounded-3xl p-6 shadow-sm border text-center overflow-hidden" style="background-color: ${theme.card}; border-color: ${theme.border};">
             <div class="flex justify-between items-center text-xs font-bold mb-2">
               <span class="px-3 py-1 rounded-full" style="background-color: ${theme.accent}; color: ${theme.primaryDark};">Lv.${petInfo.level} ${petInfo.stage}</span>
-              <span style="color: ${theme.subtext};">タップでなでなで 💕</span>
+              <span style="color: ${theme.subtext};">タップしてなでなで 💕</span>
             </div>
 
-            <div onclick="petTap(event)" class="my-4 inline-block cursor-pointer select-none">
+            <div onclick="petTap()" class="my-4 inline-block cursor-pointer select-none">
               <div id="pet-avatar" class="text-7xl pet-float drop-shadow-sm">${petInfo.emoji}</div>
             </div>
 
@@ -625,42 +692,44 @@ URL: ${window.location.href}
             </div>
           </div>
 
-          <!-- 今日の質問ショートカット -->
           <div onclick="switchTab('question')" class="cursor-pointer rounded-3xl p-4 shadow-sm border flex items-center justify-between active:scale-98 transition" style="background-color: ${theme.accent}; border-color: ${theme.border};">
             <div class="pr-3">
-              <span class="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-white" style="color: ${theme.primaryDark};">今日の質問 (${answeredCount}/2 回答済)</span>
+              <span class="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-white" style="color: ${theme.primaryDark};">今日の質問 (${answeredCount}/2人 回答済み)</span>
               <p class="text-sm font-bold mt-1.5 line-clamp-1">${getQuestionForDate(todayStr)}</p>
             </div>
             <div class="text-2xl">💌</div>
           </div>
 
-          <!-- ふたりの気分＆ミニメモ -->
           <div class="rounded-3xl p-4 shadow-sm border space-y-4" style="background-color: ${theme.card}; border-color: ${theme.border};">
-            <h3 class="text-sm font-extrabold">今の気分＆ミニメモボード</h3>
+            <h3 class="text-sm font-extrabold">いまの気分・ひとことメモ</h3>
 
             <div class="grid grid-cols-2 gap-3">
-              <!-- 自分 -->
               <div class="p-3 rounded-2xl border" style="background-color: ${theme.bg}; border-color: ${theme.border};">
                 <div class="flex items-center justify-between mb-1">
-                  <span class="text-xs font-bold">${me.name} (自分)</span>
+                  <span class="text-xs font-bold truncate pr-1">${state.myName} (自分)</span>
                   <span class="text-2xl">${me.mood}</span>
                 </div>
                 <p class="text-xs break-words min-h-[2.5rem]" style="color: ${theme.subtext};">「${me.memo}」</p>
               </div>
 
-              <!-- パートナー -->
               <div class="p-3 rounded-2xl border" style="background-color: ${theme.bg}; border-color: ${theme.border};">
-                <div class="flex items-center justify-between mb-1">
-                  <span class="text-xs font-bold">${partner.name}</span>
-                  <span class="text-2xl">${partner.mood}</span>
-                </div>
-                <p class="text-xs break-words min-h-[2.5rem]" style="color: ${theme.subtext};">「${partner.memo}」</p>
+                ${partner ? `
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-xs font-bold truncate pr-1">${partnerName}</span>
+                    <span class="text-2xl">${partner.mood}</span>
+                  </div>
+                  <p class="text-xs break-words min-h-[2.5rem]" style="color: ${theme.subtext};">「${partner.memo}」</p>
+                ` : `
+                  <div class="flex flex-col items-center justify-center h-full text-center py-2">
+                    <span class="text-lg mb-0.5">💌</span>
+                    <p class="text-[11px] font-bold" style="color: ${theme.subtext};">パートナーの参加待ちです</p>
+                  </div>
+                `}
               </div>
             </div>
 
-            <!-- 気分変更ボタン -->
             <div>
-              <p class="text-[11px] font-bold mb-1.5" style="color: ${theme.subtext};">今の気分をタップして変更：</p>
+              <p class="text-[11px] font-bold mb-1.5" style="color: ${theme.subtext};">気分をえらぶ：</p>
               <div class="grid grid-cols-6 gap-1.5">
                 ${MOODS.map(m => `
                   <button onclick="updateMood('${m.emoji}')" class="py-2 rounded-xl border text-lg flex flex-col items-center justify-center transition ${me.mood === m.emoji ? 'ring-2' : ''}" style="background-color: ${me.mood === m.emoji ? theme.accent : theme.bg}; border-color: ${theme.border};">
@@ -670,10 +739,9 @@ URL: ${window.location.href}
               </div>
             </div>
 
-            <!-- メモ入力 -->
             <div class="flex gap-2">
-              <input id="my-memo-input" type="text" maxlength="40" value="${me.memo}" placeholder="ひとことメモを残す..." class="flex-1 px-3 py-2 rounded-xl border text-xs focus:outline-none" style="border-color: ${theme.border}; background-color: ${theme.bg};" />
-              <button onclick="updateMemo()" class="px-4 py-2 rounded-xl text-white text-xs font-bold shrink-0" style="background-color: ${theme.primary};">貼る</button>
+              <input id="my-memo-input" type="text" maxlength="40" value="${me.memo}" placeholder="ひとことメモを書く..." class="flex-1 px-3 py-2 rounded-xl border text-base focus:outline-none" style="border-color: ${theme.border}; background-color: ${theme.bg};" />
+              <button onclick="updateMemo()" class="px-4 py-2 rounded-xl text-white text-xs font-bold shrink-0" style="background-color: ${theme.primary};">送信</button>
             </div>
           </div>
         </div>
@@ -684,54 +752,49 @@ URL: ${window.location.href}
       const targetDate = state.selectedDate || getTodayStr();
       const isToday = targetDate === getTodayStr();
       const qText = (d.answers[targetDate] && d.answers[targetDate].question) || getQuestionForDate(targetDate);
-      const ansObj = d.answers[targetDate] || { A: "", B: "" };
+      const byName = (d.answers[targetDate] && d.answers[targetDate].byName) || {};
 
-      const myRole = state.role;
-      const partnerRole = myRole === "A" ? "B" : "A";
-      const myName = d[`partner${myRole}`].name;
-      const partnerName = d[`partner${partnerRole}`].name;
+      const { partnerName } = getPartnerInfo(d);
+      const otherName = Object.keys(byName).find(n => n !== state.myName) || partnerName || "パートナー";
 
-      const myAns = ansObj[myRole] || "";
-      const partnerAns = ansObj[partnerRole] || "";
+      const myAns = byName[state.myName] || "";
+      const partnerAns = byName[otherName] || "";
       const isUnlocked = Boolean(myAns);
 
       return `
         <div class="p-4 space-y-4 pb-24">
           <div class="flex items-center justify-between">
             <span class="text-xs font-extrabold px-3 py-1 rounded-full" style="background-color: ${theme.accent}; color: ${theme.primaryDark};">
-              ${isToday ? "✨ 今日の質問" : "🕰️ 過去の質問"} (${targetDate})
+              ${isToday ? "✨ きょうの質問" : "🕰️ 過去の質問"} (${targetDate})
             </span>
-            ${!isToday ? `<button onclick="selectCalendarDate('${getTodayStr()}')" class="text-xs font-bold underline" style="color: ${theme.primary};">今日に戻る</button>` : ""}
+            ${!isToday ? `<button onclick="selectCalendarDate('${getTodayStr()}')" class="text-xs font-bold underline" style="color: ${theme.primary};">きょうに戻る</button>` : ""}
           </div>
 
-          <!-- 質問カード -->
           <div class="rounded-3xl p-6 shadow-sm border text-center" style="background-color: ${theme.card}; border-color: ${theme.border};">
             <div class="text-3xl mb-2">💌</div>
             <h2 class="text-base font-extrabold leading-relaxed">${qText}</h2>
           </div>
 
-          <!-- 自分の回答フォーム -->
           <div class="rounded-3xl p-5 shadow-sm border space-y-3" style="background-color: ${theme.card}; border-color: ${theme.border};">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-extrabold">${myName} の回答</span>
+              <span class="text-xs font-extrabold">${state.myName} の回答</span>
               <span class="text-[11px] font-bold" style="color: ${myAns ? theme.primaryDark : theme.subtext};">${myAns ? "回答済み ✓" : "未回答"}</span>
             </div>
-            <textarea id="answer-textarea" rows="3" placeholder="ここにあなたの気持ちや答えを書いてね..." class="w-full p-3 rounded-2xl border text-sm focus:outline-none" style="border-color: ${theme.border}; background-color: ${theme.bg};">${myAns}</textarea>
+            <textarea id="answer-textarea" rows="3" placeholder="ここにあなたの答えを書いてね..." class="w-full p-3 rounded-2xl border text-base focus:outline-none" style="border-color: ${theme.border}; background-color: ${theme.bg};">${myAns}</textarea>
             <button onclick="submitAnswer('${targetDate}')" class="w-full py-3 rounded-2xl text-white font-bold text-sm shadow-sm active:scale-95 transition" style="background-color: ${theme.primary};">
-              ${myAns ? "回答を更新する" : "回答を送信してロック解除 🔓"}
+              ${myAns ? "回答を更新する" : "回答を送信してロックを解除する 🔓"}
             </button>
           </div>
 
-          <!-- パートナーの回答カード（ロックギミック付き） -->
           <div class="rounded-3xl p-5 shadow-sm border" style="background-color: ${theme.card}; border-color: ${theme.border};">
             <div class="flex items-center justify-between mb-2">
-              <span class="text-xs font-extrabold">${partnerName} の回答</span>
-              <span class="text-[11px] font-bold" style="color: ${partnerAns ? theme.primaryDark : theme.subtext};">${partnerAns ? "入力済み" : "まだ入力されていません"}</span>
+              <span class="text-xs font-extrabold">${otherName} の回答</span>
+              <span class="text-[11px] font-bold" style="color: ${partnerAns ? theme.primaryDark : theme.subtext};">${partnerAns ? "回答済み" : "まだ回答していません"}</span>
             </div>
 
             ${!partnerAns ? `
               <div class="p-4 rounded-2xl text-center text-xs" style="background-color: ${theme.bg}; color: ${theme.subtext};">
-                ${partnerName} の回答待ちです ⏳
+                ${otherName} の回答を待っています ⏳
               </div>
             ` : isUnlocked ? `
               <div class="p-4 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap" style="background-color: ${theme.accent};">
@@ -740,8 +803,8 @@ URL: ${window.location.href}
             ` : `
               <div class="p-5 rounded-2xl text-center space-y-1 border border-dashed" style="background-color: ${theme.bg}; border-color: ${theme.primary};">
                 <div class="text-2xl">🔒</div>
-                <p class="text-xs font-extrabold">${partnerName} の回答が届いています！</p>
-                <p class="text-[11px]" style="color: ${theme.subtext};">あなたが回答を送信すると中身が見られるようになります</p>
+                <p class="text-xs font-extrabold">${otherName} からの回答が届いています！</p>
+                <p class="text-[11px]" style="color: ${theme.subtext};">あなたが回答を送信すると、中身が見られるようになります</p>
               </div>
             `}
           </div>
@@ -765,15 +828,14 @@ URL: ${window.location.href}
       for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${y}-${String(m + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
         const ans = d.answers[dateStr];
-        const hasA = ans && ans.A;
-        const hasB = ans && ans.B;
+        const count = ans && ans.byName ? Object.values(ans.byName).filter(Boolean).length : 0;
         const isAnniv = annivMD && dateStr.slice(5) === annivMD;
         const isToday = dateStr === todayStr;
 
         let badge = "";
         if (isAnniv) badge = "🎂";
-        else if (hasA && hasB) badge = "💖";
-        else if (hasA || hasB) badge = "⭐";
+        else if (count >= 2) badge = "💖";
+        else if (count === 1) badge = "⭐";
 
         cells += `
           <button onclick="selectCalendarDate('${dateStr}')" class="h-14 rounded-2xl border flex flex-col items-center justify-center relative transition active:scale-95" style="background-color: ${isToday ? theme.accent : theme.card}; border-color: ${isToday ? theme.primary : theme.border};">
@@ -801,24 +863,24 @@ URL: ${window.location.href}
             </div>
 
             <div class="mt-4 pt-3 border-t flex justify-around text-[11px] font-bold" style="border-color: ${theme.border}; color: ${theme.subtext};">
-              <span>💖 ふたり回答済</span>
-              <span>⭐ 片方回答済</span>
+              <span>💖 ふたり回答</span>
+              <span>⭐ 片方回答</span>
               <span>🎂 記念日</span>
             </div>
           </div>
-          <p class="text-center text-xs" style="color: ${theme.subtext};">日付をタップするとその日の質問にさかのぼって回答・閲覧できます</p>
+          <p class="text-center text-xs" style="color: ${theme.subtext};">日付をタップすると、その日の質問の確認や過去の回答ができます</p>
         </div>
       `;
     }
 
     function renderSettings(d, theme) {
       const answeredDates = Object.keys(d.answers).sort().reverse();
+      const { partnerName } = getPartnerInfo(d);
 
       return `
         <div class="p-4 space-y-4 pb-24">
-          <!-- テーマ着せ替え -->
           <div class="rounded-3xl p-5 shadow-sm border space-y-3" style="background-color: ${theme.card}; border-color: ${theme.border};">
-            <h3 class="text-sm font-extrabold">🎨 お部屋の着せ替えテーマ</h3>
+            <h3 class="text-sm font-extrabold">🎨 テーマの着せ替え</h3>
             <div class="grid grid-cols-2 gap-2.5">
               ${Object.entries(THEMES).map(([key, t]) => `
                 <button onclick="changeTheme('${key}')" class="p-3 rounded-2xl border text-left flex items-center gap-2.5 transition" style="background-color: ${t.bg}; border-color: ${d.theme === key ? t.primary : t.border}; border-width: ${d.theme === key ? '2px' : '1px'};">
@@ -829,64 +891,62 @@ URL: ${window.location.href}
             </div>
           </div>
 
-          <!-- ルーム・プロフィール設定 -->
           <form onsubmit="saveSettings(event)" class="rounded-3xl p-5 shadow-sm border space-y-3" style="background-color: ${theme.card}; border-color: ${theme.border};">
             <div class="flex items-center justify-between">
-              <h3 class="text-sm font-extrabold">⚙️ ふたりとペットの設定</h3>
-              <button type="button" onclick="copyRoomInfo()" class="text-xs font-bold px-3 py-1 rounded-full" style="background-color: ${theme.accent}; color: ${theme.primaryDark};">招待コピー 📋</button>
+              <h3 class="text-sm font-extrabold">⚙️ 設定とプロフィール</h3>
+              <button type="button" onclick="copyRoomInfo()" class="text-xs font-bold px-3 py-1 rounded-full" style="background-color: ${theme.accent}; color: ${theme.primaryDark};">招待をコピー 📋</button>
             </div>
 
             <div class="grid grid-cols-2 gap-2.5">
               <div>
-                <label class="block text-[11px] font-bold mb-1">パートナーA 名前</label>
-                <input id="set-name-a" type="text" value="${d.partnerA.name}" class="w-full px-3 py-2 rounded-xl border text-xs" style="border-color: ${theme.border}; background-color: ${theme.bg};" />
+                <label class="block text-[11px] font-bold mb-1">あなたのお名前</label>
+                <input id="set-my-name" type="text" value="${state.myName}" class="w-full px-3 py-2 rounded-xl border text-base" style="border-color: ${theme.border}; background-color: ${theme.bg};" />
               </div>
               <div>
-                <label class="block text-[11px] font-bold mb-1">パートナーB 名前</label>
-                <input id="set-name-b" type="text" value="${d.partnerB.name}" class="w-full px-3 py-2 rounded-xl border text-xs" style="border-color: ${theme.border}; background-color: ${theme.bg};" />
+                <label class="block text-[11px] font-bold mb-1">パートナーの名前</label>
+                <input type="text" disabled value="${partnerName || '参加待ち'}" class="w-full px-3 py-2 rounded-xl border text-base opacity-70" style="border-color: ${theme.border}; background-color: ${theme.bg};" />
               </div>
             </div>
 
             <div class="grid grid-cols-2 gap-2.5">
               <div>
                 <label class="block text-[11px] font-bold mb-1">ふたりの記念日</label>
-                <input id="set-anniv" type="date" value="${d.anniversary}" class="w-full px-3 py-2 rounded-xl border text-xs" style="border-color: ${theme.border}; background-color: ${theme.bg};" />
+                <input id="set-anniv" type="date" value="${d.anniversary}" class="w-full px-3 py-2 rounded-xl border text-base" style="border-color: ${theme.border}; background-color: ${theme.bg};" />
               </div>
               <div>
                 <label class="block text-[11px] font-bold mb-1">ペットの名前</label>
-                <input id="set-pet-name" type="text" value="${d.pet.name}" class="w-full px-3 py-2 rounded-xl border text-xs" style="border-color: ${theme.border}; background-color: ${theme.bg};" />
+                <input id="set-pet-name" type="text" value="${d.pet.name}" class="w-full px-3 py-2 rounded-xl border text-base" style="border-color: ${theme.border}; background-color: ${theme.bg};" />
               </div>
             </div>
 
             <div>
               <label class="block text-[11px] font-bold mb-1">あいことば（パスワード変更）</label>
-              <input id="set-pass" type="text" value="${d.password}" class="w-full px-3 py-2 rounded-xl border text-xs" style="border-color: ${theme.border}; background-color: ${theme.bg};" />
+              <input id="set-pass" type="text" value="${d.password}" class="w-full px-3 py-2 rounded-xl border text-base" style="border-color: ${theme.border}; background-color: ${theme.bg};" />
             </div>
 
-            <button type="submit" class="w-full py-2.5 rounded-2xl text-white font-bold text-xs" style="background-color: ${theme.primary};">設定を保存する</button>
+            <button type="submit" class="w-full py-2.5 rounded-2xl text-white font-bold text-xs" style="background-color: ${theme.primary};">変更を保存する</button>
           </form>
 
-          <!-- 思い出アルバム一覧 -->
           <div class="rounded-3xl p-5 shadow-sm border space-y-3" style="background-color: ${theme.card}; border-color: ${theme.border};">
             <h3 class="text-sm font-extrabold">📖 思い出アルバム (${answeredDates.length}件)</h3>
             ${answeredDates.length === 0 ? `
-              <p class="text-xs text-center py-4" style="color: ${theme.subtext};">まだ回答した質問がありません</p>
+              <p class="text-xs text-center py-4" style="color: ${theme.subtext};">まだ回答した質問はありません</p>
             ` : `
               <div class="space-y-3 max-h-72 overflow-y-auto no-scrollbar">
                 ${answeredDates.map(dt => {
                   const item = d.answers[dt];
-                  const unlocked = Boolean(item.A && item.B);
+                  const entries = Object.entries(item.byName || {}).filter(([, v]) => Boolean(v));
+                  const unlocked = entries.length >= 2;
                   return `
                     <div onclick="selectCalendarDate('${dt}')" class="p-3 rounded-2xl border cursor-pointer" style="background-color: ${theme.bg}; border-color: ${theme.border};">
                       <div class="flex justify-between text-[11px] font-bold mb-1" style="color: ${theme.subtext};">
                         <span>${dt}</span>
-                        <span>${unlocked ? "💖 両方回答済" : "🔒 片方のみ回答"}</span>
+                        <span>${unlocked ? "💖 ふたり回答" : "🔒 片方のみ"}</span>
                       </div>
                       <p class="text-xs font-extrabold mb-1.5">${item.question}</p>
-                      ${unlocked ? `
-                        <p class="text-[11px]"><b>${d.partnerA.name}:</b> ${item.A}</p>
-                        <p class="text-[11px]"><b>${d.partnerB.name}:</b> ${item.B}</p>
-                      ` : `<p class="text-[11px]" style="color: ${theme.primaryDark};">タップして回答するとロック解除されます</p>`}
+                      ${unlocked ? entries.map(([n, ans]) => `
+                        <p class="text-[11px]"><b>${n}:</b> ${ans}</p>
+                      `).join("") : `<p class="text-[11px]" style="color: ${theme.primaryDark};">タップして回答するとロックが解除されます</p>`}
                     </div>
                   `;
                 }).join("")}
@@ -894,9 +954,8 @@ URL: ${window.location.href}
             `}
           </div>
 
-          <!-- バージョン・ログアウト -->
           <div class="text-center space-y-2 pt-2">
-            <p class="text-[11px]" style="color: ${theme.subtext};">ふたりのおうち ${APP_VERSION}（アップデート対応版）</p>
+            <p class="text-[11px]" style="color: ${theme.subtext};">ふたりのおうち</p>
             <button onclick="logoutRoom()" class="text-xs font-bold underline" style="color: ${theme.subtext};">別のルームに入り直す（ログアウト）</button>
           </div>
         </div>
@@ -911,7 +970,7 @@ URL: ${window.location.href}
       root.style.color = theme.text;
 
       if (state.screen === "login" || !state.roomData) {
-        root.innerHTML = renderLogin(theme) + renderToast(theme);
+        root.innerHTML = renderLogin(theme);
         return;
       }
 
@@ -923,13 +982,15 @@ URL: ${window.location.href}
       else if (state.activeTab === "settings") bodyHtml = renderSettings(d, theme);
 
       root.innerHTML = `
-        <!-- Header -->
         <header class="sticky top-0 z-20 px-4 py-3 border-b flex items-center justify-between backdrop-blur-md" style="background-color: ${theme.card}EE; border-color: ${theme.border};">
           <div class="flex items-center gap-2">
             <span class="text-lg">🏡</span>
             <div>
-              <h1 class="text-sm font-extrabold leading-tight">ふたりのおうち</h1>
-              <p class="text-[10px]" style="color: ${theme.subtext};">Room: ${d.roomId}</p>
+              <div class="flex items-center gap-1.5">
+                <h1 class="text-sm font-extrabold leading-tight">ふたりのおうち</h1>
+                
+              </div>
+              <p class="text-[10px]" style="color: ${theme.subtext};">Room: ${d.roomId} / ${state.myName}</p>
             </div>
           </div>
           <button onclick="copyRoomInfo()" class="text-[11px] font-bold px-2.5 py-1 rounded-full border" style="background-color: ${theme.bg}; border-color: ${theme.border};">
@@ -937,18 +998,16 @@ URL: ${window.location.href}
           </button>
         </header>
 
-        <!-- Main Content -->
         <main class="flex-1">
           ${bodyHtml}
         </main>
 
-        <!-- Bottom Navigation -->
         <nav class="fixed bottom-0 w-full max-w-md border-t grid grid-cols-4 py-2 z-20" style="background-color: ${theme.card}; border-color: ${theme.border};">
           ${[
             { id: "home", icon: "🏡", label: "おうち" },
-            { id: "question", icon: "💌", label: "今日の質問" },
+            { id: "question", icon: "💌", label: "きょうの質問" },
             { id: "calendar", icon: "📅", label: "カレンダー" },
-            { id: "settings", icon: "📖", label: "設定・記録" }
+            { id: "settings", icon: "📖", label: "設定" }
           ].map(tab => `
             <button onclick="switchTab('${tab.id}')" class="flex flex-col items-center justify-center py-1 transition" style="color: ${state.activeTab === tab.id ? theme.primary : theme.subtext};">
               <span class="text-lg">${tab.icon}</span>
@@ -956,17 +1015,6 @@ URL: ${window.location.href}
             </button>
           `).join("")}
         </nav>
-
-        ${renderToast(theme)}
-      `;
-    }
-
-    function renderToast(theme) {
-      if (!state.toastMessage) return "";
-      return `
-        <div class="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full shadow-lg text-xs font-bold text-white whitespace-nowrap" style="background-color: ${theme.text};">
-          ${state.toastMessage}
-        </div>
       `;
     }
 
